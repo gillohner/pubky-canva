@@ -1,0 +1,13 @@
+[server]
+listen = "127.0.0.1:3001"
+
+[watcher]
+poll_interval_ms = 5000
+
+[canvas]
+initial_size = 16
+max_credits = 10
+credit_regen_seconds = 600
+
+[database]
+path = "canva.db"

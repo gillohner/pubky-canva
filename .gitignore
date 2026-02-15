@@ -1,0 +1,14 @@
+# Rust
+canva-indexer/target/
+canva-indexer/canva.db
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Environment
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
