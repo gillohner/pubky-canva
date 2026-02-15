@@ -40,6 +40,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/events", get(sse_events))
         .route("/api/ingest/{public_key}", put(ingest_user))
         .route("/api/user/{public_key}/credits", get(get_credits))
+        .route("/api/user/{public_key}/profile", get(get_profile))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -274,4 +275,37 @@ async fn get_credits(
     })?;
 
     Ok(Json(result))
+}
+
+async fn get_profile(
+    State(state): State<AppState>,
+    Path(public_key): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let uri = format!("pubky://{}/pub/pubky.app/profile.json", public_key);
+
+    let response = state
+        .pubky
+        .public_storage()
+        .get(&uri)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch profile for {public_key}: {e}");
+            StatusCode::BAD_GATEWAY
+        })?;
+
+    if !response.status().is_success() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    let bytes = response.bytes().await.map_err(|e| {
+        error!("Failed to read profile body for {public_key}: {e}");
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    let profile: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
+        error!("Invalid profile JSON for {public_key}: {e}");
+        StatusCode::BAD_GATEWAY
+    })?;
+
+    Ok(Json(profile))
 }

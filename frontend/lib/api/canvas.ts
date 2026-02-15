@@ -25,3 +25,13 @@ export function fetchCredits(publicKey: string): Promise<CreditsResponse> {
 export function ingestUser(publicKey: string): Promise<void> {
   return apiFetch(`/api/ingest/${publicKey}`, { method: "PUT" });
 }
+
+export interface PubkyProfile {
+  name: string;
+  bio?: string;
+  image?: string;
+}
+
+export function fetchProfile(publicKey: string): Promise<PubkyProfile> {
+  return apiFetch<PubkyProfile>(`/api/user/${publicKey}/profile`);
+}

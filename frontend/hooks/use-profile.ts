@@ -1,12 +1,18 @@
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { fetchProfile } from "@/lib/pubky/profiles";
+import { fetchProfile, type PubkyProfile } from "@/lib/api/canvas";
 
 const PROFILE_STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 export function useProfile(pk: string | null) {
-  return useQuery({
+  return useQuery<PubkyProfile | null>({
     queryKey: ["profile", pk],
-    queryFn: () => fetchProfile(pk!),
+    queryFn: async () => {
+      try {
+        return await fetchProfile(pk!);
+      } catch {
+        return null;
+      }
+    },
     enabled: !!pk,
     staleTime: PROFILE_STALE_TIME,
   });
@@ -16,7 +22,13 @@ export function useProfileMap(pks: string[]): Map<string, string> {
   const queries = useQueries({
     queries: pks.map((pk) => ({
       queryKey: ["profile", pk],
-      queryFn: () => fetchProfile(pk),
+      queryFn: async (): Promise<PubkyProfile | null> => {
+        try {
+          return await fetchProfile(pk);
+        } catch {
+          return null;
+        }
+      },
       staleTime: PROFILE_STALE_TIME,
     })),
   });
