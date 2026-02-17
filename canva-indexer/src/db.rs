@@ -43,7 +43,8 @@ pub fn open(path: &str) -> Result<Db> {
         );
 
         CREATE TABLE IF NOT EXISTS canvas_resizes (
-            size INTEGER NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
             activated_at INTEGER NOT NULL
         );
         ",
@@ -57,10 +58,10 @@ pub fn open(path: &str) -> Result<Db> {
     )?;
     if count == 0 {
         // Will be set properly by main.rs based on config
-        // Default to 16 here as fallback
+        // Default to 16x16 here as fallback
         conn.execute(
-            "INSERT INTO canvas_resizes (size, activated_at) VALUES (?1, 0)",
-            params![16],
+            "INSERT INTO canvas_resizes (width, height, activated_at) VALUES (?1, ?2, 0)",
+            params![16, 16],
         )?;
     }
 
@@ -76,32 +77,32 @@ pub fn set_initial_size(db: &Db, size: u32) -> Result<()> {
     )?;
     if count == 1 {
         conn.execute(
-            "UPDATE canvas_resizes SET size = ?1 WHERE activated_at = 0",
-            params![size],
+            "UPDATE canvas_resizes SET width = ?1, height = ?2 WHERE activated_at = 0",
+            params![size, size],
         )?;
     }
     Ok(())
 }
 
-/// Get current canvas size (latest resize)
-pub fn get_canvas_size(db: &Db) -> Result<u32> {
+/// Get current canvas dimensions (width, height) from latest resize
+pub fn get_canvas_dimensions(db: &Db) -> Result<(u32, u32)> {
     let conn = db.lock().unwrap();
-    let size: u32 = conn.query_row(
-        "SELECT size FROM canvas_resizes ORDER BY activated_at DESC LIMIT 1",
+    let dims: (u32, u32) = conn.query_row(
+        "SELECT width, height FROM canvas_resizes ORDER BY activated_at DESC LIMIT 1",
         [],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    Ok(size)
+    Ok(dims)
 }
 
-/// Get resize history ordered by size ascending (for validation)
-pub fn get_resize_history(db: &Db) -> Result<Vec<(u32, i64)>> {
+/// Get resize history ordered by activated_at ascending (for validation)
+pub fn get_resize_history(db: &Db) -> Result<Vec<(u32, u32, i64)>> {
     let conn = db.lock().unwrap();
     let mut stmt = conn.prepare(
-        "SELECT size, activated_at FROM canvas_resizes ORDER BY size ASC",
+        "SELECT width, height, activated_at FROM canvas_resizes ORDER BY activated_at ASC",
     )?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
 }
@@ -261,11 +262,11 @@ pub fn get_fill_stats(db: &Db) -> Result<(u32, u32)> {
 }
 
 /// Perform canvas resize
-pub fn resize_canvas(db: &Db, new_size: u32, activated_at: i64) -> Result<()> {
+pub fn resize_canvas(db: &Db, new_width: u32, new_height: u32, activated_at: i64) -> Result<()> {
     let conn = db.lock().unwrap();
     conn.execute(
-        "INSERT INTO canvas_resizes (size, activated_at) VALUES (?1, ?2)",
-        params![new_size, activated_at],
+        "INSERT INTO canvas_resizes (width, height, activated_at) VALUES (?1, ?2, ?3)",
+        params![new_width, new_height, activated_at],
     )?;
     Ok(())
 }

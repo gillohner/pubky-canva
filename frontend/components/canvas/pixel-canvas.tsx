@@ -46,17 +46,18 @@ export function PixelCanvas() {
 
   const profileMap = useProfileMap(uniqueUserPks);
 
-  const size = data?.size ?? 16;
+  const width = data?.width ?? 16;
+  const height = data?.height ?? 16;
 
   const handleCellClick = useCallback(
     (x: number, y: number) => {
       const pixel = pixelMap.get(`${x},${y}`);
 
       if (isAuthenticated) {
-        // Authenticated: show color picker
+        // Authenticated: show color picker + info if pixel has data
         setSelected({ x, y });
         setShowPicker(true);
-        setShowInfo(null);
+        setShowInfo(pixel ? { x, y } : null);
       } else if (pixel) {
         // Not authenticated: show info for filled pixel
         setShowInfo({ x, y });
@@ -110,8 +111,8 @@ export function PixelCanvas() {
     );
   }
 
-  // Calculate cell size to fit viewport
-  const cellSize = `min(calc((100vw - 2rem) / ${size}), calc((100vh - 8rem) / ${size}))`;
+  // Calculate cell size to fit viewport (constrained by whichever dimension is tighter)
+  const cellSize = `min(calc((100vw - 2rem) / ${width}), calc((100vh - 8rem) / ${height}))`;
 
   return (
     <div className="relative flex flex-col items-center gap-4">
@@ -119,13 +120,13 @@ export function PixelCanvas() {
       <div
         className="relative grid border border-neutral-700"
         style={{
-          gridTemplateColumns: `repeat(${size}, ${cellSize})`,
-          gridTemplateRows: `repeat(${size}, ${cellSize})`,
+          gridTemplateColumns: `repeat(${width}, ${cellSize})`,
+          gridTemplateRows: `repeat(${height}, ${cellSize})`,
         }}
       >
-        {Array.from({ length: size * size }, (_, i) => {
-          const x = i % size;
-          const y = Math.floor(i / size);
+        {Array.from({ length: width * height }, (_, i) => {
+          const x = i % width;
+          const y = Math.floor(i / width);
           const pixel = pixelMap.get(`${x},${y}`);
           const isSelected =
             selected?.x === x && selected?.y === y;
@@ -150,29 +151,41 @@ export function PixelCanvas() {
             />
           );
         })}
+        {/* Popover positioned next to the selected pixel */}
+        {(selected || showInfo) && (showPicker || showInfo) && (() => {
+          const activePixel = selected || showInfo!;
+          const isLeftHalf = activePixel.x < width / 2;
+          return (
+            <div
+              className="absolute z-10"
+              style={{
+                top: `calc(${((activePixel.y + 0.5) / height) * 100}%)`,
+                ...(isLeftHalf
+                  ? { left: `calc(${((activePixel.x + 1) / width) * 100}% + 8px)` }
+                  : { right: `calc(${((width - activePixel.x) / width) * 100}% + 8px)` }),
+                transform: 'translateY(-50%)',
+              }}
+            >
+              <div className="flex flex-col gap-2">
+                {showInfo && (
+                  <PixelInfoPanel
+                    x={showInfo.x}
+                    y={showInfo.y}
+                    onClose={handleCancel}
+                  />
+                )}
+                {showPicker && selected && (
+                  <ColorPicker
+                    onSelect={handleColorSelect}
+                    onCancel={handleCancel}
+                    disabled={placePixel.isPending}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
-
-      {/* Color picker popover */}
-      {showPicker && selected && (
-        <div className="absolute z-10" style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-          <ColorPicker
-            onSelect={handleColorSelect}
-            onCancel={handleCancel}
-            disabled={placePixel.isPending}
-          />
-        </div>
-      )}
-
-      {/* Pixel info popover */}
-      {showInfo && (
-        <div className="absolute z-10" style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}>
-          <PixelInfoPanel
-            x={showInfo.x}
-            y={showInfo.y}
-            onClose={handleCancel}
-          />
-        </div>
-      )}
     </div>
   );
 }

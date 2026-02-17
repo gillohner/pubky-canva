@@ -29,7 +29,7 @@ export function Header() {
           <h1 className="text-lg font-bold text-white">Pubky Canva</h1>
           {meta && (
             <span className="hidden text-xs text-neutral-500 sm:inline">
-              {meta.size}x{meta.size} | {meta.filled}/{meta.total_pixels} filled
+              {meta.width}x{meta.height} | {meta.filled}/{meta.total_pixels} filled
               | {meta.overwritten} overwritten
             </span>
           )}

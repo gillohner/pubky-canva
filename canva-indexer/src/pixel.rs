@@ -30,8 +30,9 @@ pub struct CanvaPixel {
 impl CanvaPixel {
     pub fn validate(
         &self,
-        canvas_size: u32,
-        resize_history: &[(u32, i64)],
+        canvas_width: u32,
+        canvas_height: u32,
+        resize_history: &[(u32, u32, i64)],
         timestamp: i64,
     ) -> Result<(), String> {
         if self.color > 15 {
@@ -41,17 +42,16 @@ impl CanvaPixel {
             ));
         }
 
-        if self.x >= canvas_size || self.y >= canvas_size {
+        if self.x >= canvas_width || self.y >= canvas_height {
             return Err(format!(
-                "Coordinates ({}, {}) out of bounds for canvas size {}",
-                self.x, self.y, canvas_size
+                "Coordinates ({}, {}) out of bounds for canvas {}x{}",
+                self.x, self.y, canvas_width, canvas_height
             ));
         }
 
         // Anti-cheat: ensure pixel wasn't pre-placed before the canvas expanded to include it
-        let required_size = self.x.max(self.y) + 1;
-        for &(size, activated_at) in resize_history {
-            if size >= required_size {
+        for &(width, height, activated_at) in resize_history {
+            if self.x < width && self.y < height {
                 if timestamp < activated_at {
                     return Err(format!(
                         "Pixel at ({}, {}) placed before canvas expanded to include it",
@@ -63,7 +63,7 @@ impl CanvaPixel {
         }
 
         Err(format!(
-            "No canvas size found that includes ({}, {})",
+            "No canvas dimensions found that include ({}, {})",
             self.x, self.y
         ))
     }

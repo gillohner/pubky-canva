@@ -14,7 +14,12 @@ pub enum SseEvent {
     #[serde(rename = "pixel")]
     Pixel(PixelState),
     #[serde(rename = "resize")]
-    Resize { old_size: u32, new_size: u32 },
+    Resize {
+        old_width: u32,
+        old_height: u32,
+        new_width: u32,
+        new_height: u32,
+    },
 }
 
 pub async fn run(
@@ -253,20 +258,20 @@ async fn process_pixel_event(
     let pixel: CanvaPixel = serde_json::from_slice(&blob)
         .map_err(|e| anyhow!("Invalid pixel JSON: {e}"))?;
 
-    // Get canvas size and resize history for validation
-    let (canvas_size, resize_history) = {
+    // Get canvas dimensions and resize history for validation
+    let (canvas_width, canvas_height, resize_history) = {
         let db = db.clone();
-        tokio::task::spawn_blocking(move || -> Result<(u32, Vec<(u32, i64)>)> {
-            let size = db::get_canvas_size(&db)?;
+        tokio::task::spawn_blocking(move || -> Result<(u32, u32, Vec<(u32, u32, i64)>)> {
+            let (w, h) = db::get_canvas_dimensions(&db)?;
             let history = db::get_resize_history(&db)?;
-            Ok((size, history))
+            Ok((w, h, history))
         })
         .await??
     };
 
     // Validate pixel
     pixel
-        .validate(canvas_size, &resize_history, timestamp)
+        .validate(canvas_width, canvas_height, &resize_history, timestamp)
         .map_err(|e| anyhow!("Pixel validation failed: {e}"))?;
 
     // Check credits
@@ -323,34 +328,43 @@ async fn check_resize(
     _config: &Config,
     sse_tx: &broadcast::Sender<SseEvent>,
 ) -> Result<()> {
-    let (canvas_size, filled, overwritten) = {
+    let (canvas_width, canvas_height, filled, overwritten) = {
         let db = db.clone();
-        tokio::task::spawn_blocking(move || -> Result<(u32, u32, u32)> {
-            let size = db::get_canvas_size(&db)?;
+        tokio::task::spawn_blocking(move || -> Result<(u32, u32, u32, u32)> {
+            let (w, h) = db::get_canvas_dimensions(&db)?;
             let (filled, overwritten) = db::get_fill_stats(&db)?;
-            Ok((size, filled, overwritten))
+            Ok((w, h, filled, overwritten))
         })
         .await??
     };
 
-    let total_pixels = canvas_size * canvas_size;
+    let total_pixels = canvas_width * canvas_height;
     let half_pixels = total_pixels / 2;
 
     if filled >= total_pixels && overwritten >= half_pixels {
-        let new_size = canvas_size * 2;
+        // Alternate expansion: if square, double width; if wider, double height
+        // 16x16 → 32x16 → 32x32 → 64x32 → 64x64 → 128x64 → ...
+        let (new_width, new_height) = if canvas_width == canvas_height {
+            (canvas_width * 2, canvas_height)
+        } else {
+            (canvas_width, canvas_height * 2)
+        };
+
         let now = pixel::timestamp_micros();
 
         info!(
-            "Canvas resize triggered! {} -> {} (filled={}, overwritten={}/{})",
-            canvas_size, new_size, filled, overwritten, half_pixels
+            "Canvas resize triggered! {}x{} -> {}x{} (filled={}, overwritten={}/{})",
+            canvas_width, canvas_height, new_width, new_height, filled, overwritten, half_pixels
         );
 
         let db = db.clone();
-        tokio::task::spawn_blocking(move || db::resize_canvas(&db, new_size, now)).await??;
+        tokio::task::spawn_blocking(move || db::resize_canvas(&db, new_width, new_height, now)).await??;
 
         let _ = sse_tx.send(SseEvent::Resize {
-            old_size: canvas_size,
-            new_size,
+            old_width: canvas_width,
+            old_height: canvas_height,
+            new_width,
+            new_height,
         });
     }
 

@@ -47,16 +47,17 @@ pub fn router(state: AppState) -> Router {
 
 #[derive(Serialize)]
 struct CanvasResponse {
-    size: u32,
+    width: u32,
+    height: u32,
     pixels: Vec<db::PixelState>,
 }
 
 async fn get_canvas(State(state): State<AppState>) -> Result<Json<CanvasResponse>, StatusCode> {
     let db = state.db.clone();
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<CanvasResponse> {
-        let size = db::get_canvas_size(&db)?;
+        let (width, height) = db::get_canvas_dimensions(&db)?;
         let pixels = db::get_canvas_state(&db)?;
-        Ok(CanvasResponse { size, pixels })
+        Ok(CanvasResponse { width, height, pixels })
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -89,7 +90,8 @@ async fn get_pixel(
 
 #[derive(Serialize)]
 struct MetaResponse {
-    size: u32,
+    width: u32,
+    height: u32,
     total_pixels: u32,
     filled: u32,
     overwritten: u32,
@@ -101,11 +103,12 @@ async fn get_meta(State(state): State<AppState>) -> Result<Json<MetaResponse>, S
     let db = state.db.clone();
     let config = state.config.clone();
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<MetaResponse> {
-        let size = db::get_canvas_size(&db)?;
+        let (width, height) = db::get_canvas_dimensions(&db)?;
         let (filled, overwritten) = db::get_fill_stats(&db)?;
         Ok(MetaResponse {
-            size,
-            total_pixels: size * size,
+            width,
+            height,
+            total_pixels: width * height,
             filled,
             overwritten,
             max_credits: config.canvas.max_credits,

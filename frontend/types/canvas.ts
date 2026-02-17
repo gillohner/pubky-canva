@@ -7,12 +7,14 @@ export interface PixelState {
 }
 
 export interface CanvasResponse {
-  size: number;
+  width: number;
+  height: number;
   pixels: PixelState[];
 }
 
 export interface CanvasMeta {
-  size: number;
+  width: number;
+  height: number;
   total_pixels: number;
   filled: number;
   overwritten: number;
@@ -49,8 +51,10 @@ export interface SsePixelEvent {
 
 export interface SseResizeEvent {
   type: "resize";
-  old_size: number;
-  new_size: number;
+  old_width: number;
+  old_height: number;
+  new_width: number;
+  new_height: number;
 }
 
 export const PICO8_PALETTE = [
