@@ -5,6 +5,44 @@ use std::sync::{Arc, Mutex};
 
 pub type Db = Arc<Mutex<Connection>>;
 
+/// Migrate canvas_resizes from old `size` column to `width`/`height`.
+/// If the table already has the new schema (or doesn't exist yet), this is a no-op.
+fn migrate_canvas_resizes(conn: &Connection) -> Result<()> {
+    // Check if old schema exists (has `size` column)
+    let has_size: bool = conn
+        .prepare("SELECT size FROM canvas_resizes LIMIT 0")
+        .is_ok();
+
+    if !has_size {
+        // Either new schema or table doesn't exist yet — create with new schema
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS canvas_resizes (
+                width INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                activated_at INTEGER NOT NULL
+            );",
+        )?;
+        return Ok(());
+    }
+
+    // Old schema detected — migrate: size becomes both width and height (was square)
+    conn.execute_batch(
+        "
+        CREATE TABLE canvas_resizes_new (
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL,
+            activated_at INTEGER NOT NULL
+        );
+        INSERT INTO canvas_resizes_new (width, height, activated_at)
+            SELECT size, size, activated_at FROM canvas_resizes;
+        DROP TABLE canvas_resizes;
+        ALTER TABLE canvas_resizes_new RENAME TO canvas_resizes;
+        ",
+    )?;
+
+    Ok(())
+}
+
 pub fn open(path: &str) -> Result<Db> {
     let conn = Connection::open(path).context("Failed to open SQLite database")?;
 
@@ -41,16 +79,13 @@ pub fn open(path: &str) -> Result<Db> {
             was_overwritten INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (x, y)
         );
-
-        CREATE TABLE IF NOT EXISTS canvas_resizes (
-            width INTEGER NOT NULL,
-            height INTEGER NOT NULL,
-            activated_at INTEGER NOT NULL
-        );
         ",
     )?;
 
-    // Seed initial canvas size if no resizes exist
+    // Migrate canvas_resizes from old `size` schema to `width`/`height`
+    migrate_canvas_resizes(&conn)?;
+
+    // Seed initial canvas dimensions if no resizes exist
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM canvas_resizes",
         [],

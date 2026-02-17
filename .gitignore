@@ -1,6 +1,7 @@
 # Rust
 canva-indexer/target/
 canva-indexer/canva.db
+canva-indexer/canva.db*
 
 # Node
 frontend/node_modules/
